@@ -8,6 +8,48 @@ the default is animated RGB glitch. All effects stay inside the hand window.
 
 ## Run on Windows
 
+### Browser frontend with Python backend
+
+The desktop app is retained. The web interface uses the **same Python tracking,
+gesture, and effects code**; it does not replace it with JavaScript filters.
+
+Run `setup.bat` once if you have not already, then open PowerShell in the project:
+
+```powershell
+.\run_web.bat
+```
+
+Open **http://127.0.0.1:8000** and click **Start camera**. Allow the browser's camera
+permission. Use **Try demo** to preview effects without a camera. Click an effect
+or use the existing hand gesture to switch. **Stop** releases the camera and closes
+the processing session. Snapshots download only when the save button is clicked.
+Keep the terminal running; press Ctrl+C there to stop the server.
+
+`run_web.bat` installs the extra web dependencies on first use. For manual setup:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements-web.txt
+.venv\Scripts\python.exe web_app.py
+```
+
+The browser sends mirrored JPEG frames over a same-origin WebSocket to FastAPI.
+Python runs MediaPipe and OpenCV, then sends back the filtered frame and status.
+Each browser session has separate tracking state. Only one frame is in flight per
+browser to avoid a queue of stale video. Frame rate depends on CPU and image size.
+No video frames are stored by the server. Demo mode uses synthetic frames and does
+not test real hand detection.
+
+This starts a **local website**, not a public deployment. GitHub stores the code;
+GitHub Pages alone cannot run this Python backend. Public hosting would require
+a Python-capable server with HTTPS and WebSocket support, plus access controls and
+resource limits appropriate for the intended audience. If hosted remotely, camera
+frames would be sent to that server. The default binds only to `127.0.0.1`.
+Browsers allow camera access on localhost or HTTPS; an HTTP LAN IP may not work.
+See [camera access requirements](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia)
+and [FastAPI WebSockets](https://fastapi.tiangolo.com/advanced/websockets/).
+
+### Desktop OpenCV window
+
 Double-click **setup.bat** once (internet required for dependencies and the model),
 then double-click **run.bat**. Setup creates a local `.venv`; it does not install
 packages into your global Python environment. Requires 64-bit Python 3.10 or newer.
@@ -96,3 +138,12 @@ Run automated geometry, masking, and model smoke checks with:
 ```powershell
 .venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+To include web endpoint and WebSocket tests, first install `requirements-dev.txt`.
+The desktop tests still run without those optional packages.
+
+With the web server running, `.venv\Scripts\python.exe scripts/verify_web.py`
+runs the optional browser checks using installed Microsoft Edge and a synthetic
+camera feed. It checks demo rendering, effect selection, timer mode, screenshots,
+camera start/stop/restart, and mobile layout, and saves previews in `preview/`.
+Real hand gestures still need a live webcam check.

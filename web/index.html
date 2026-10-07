@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A live hand-controlled camera playground. Frame a portal with your fingers and explore 13 real-time effects.">
+  <title>Hand Portal · Camera playground</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1016'/%3E%3Cpath d='M13 8H8v16h5m6-16h5v16h-5' fill='none' stroke='%2379fbd3' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Hand Portal home"><span class="brand-mark" aria-hidden="true">[<span>·</span>]</span> HAND PORTAL <span class="edition">WEB STUDIO</span></a>
+    <span class="local-label">Your camera. Your controls.</span>
+  </header>
+  <main>
+    <div class="page-heading"><div><p class="eyebrow">CAMERA PLAYGROUND</p><h1>A little magic, in your hands.</h1></div><span class="version">13 effects / live gestures</span></div>
+    <div class="workspace">
+      <section class="camera-panel" aria-label="Camera studio">
+        <div class="panel-top"><span id="source-label">CAMERA PREVIEW</span><span class="status" id="status" role="status">Camera off</span></div>
+        <div class="stage" id="stage">
+          <canvas id="output" width="960" height="640" aria-label="Processed camera preview" hidden></canvas>
+          <div id="empty" class="empty-state">
+            <div class="viewfinder" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><rect x="11" y="20" width="31" height="25" rx="6" stroke="currentColor" stroke-width="2"/><path d="m42 27 12-7v25l-12-7" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="26" cy="32" r="6" stroke="currentColor" stroke-width="2"/></svg></div>
+            <h2>Make room for your hands.</h2>
+            <p>Turn on your camera, then frame a window<br> with your thumbs and index fingers.</p>
+            <span class="empty-note">Camera starts only when you choose.</span>
+          </div>
+          <div id="live-label" class="live-label" hidden>LIVE</div>
+          <div class="effect-overlay" id="effect-overlay" hidden><span id="overlay-number">06</span><strong id="overlay-name">RGB Glitch</strong></div>
+        </div>
+        <div class="camera-toolbar">
+          <div class="camera-actions"><button id="start" class="primary" disabled>Start camera</button><button id="demo" class="secondary" disabled>Try demo</button><button id="stop" class="secondary" hidden>Stop</button></div>
+          <button id="snapshot" class="icon-button" disabled title="Save the current frame" aria-label="Save snapshot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg></button>
+        </div>
+        <p id="message" class="message" role="status">Connecting to the studio…</p>
+        <div class="readouts"><span><span class="readout-label">HANDS</span> <strong id="hands">—</strong></span><span><span class="readout-label">FRAME RATE</span> <strong id="fps">—</strong></span><span><span class="readout-label">MODE</span> <strong id="mode-readout">Gesture</strong></span></div>
+      </section>
+      <aside class="effects-panel" aria-label="Effect controls">
+        <div class="effects-heading"><div><p class="eyebrow">MAKE IT YOURS</p><h2>Choose an effect</h2></div><span class="count">13</span></div>
+        <div id="effects" class="effect-list" role="group" aria-label="Effects"></div>
+        <div class="switching"><span class="setting-title">Change effects with</span><div class="segmented" role="group" aria-label="Switching mode"><button id="gesture-mode" aria-pressed="true">Hand gesture</button><button id="auto-mode" aria-pressed="false">5-second timer</button></div><p id="mode-help">Lower a hand or fold an index finger for half a second. Reopen to reveal the next effect.</p></div>
+      </aside>
+    </div>
+    <section class="instructions" aria-label="How to use hand gestures"><div><span class="step">01</span><p><strong>Frame it</strong>Show both hands in L shapes, with your thumbs pointing inward.</p></div><div><span class="step">02</span><p><strong>Move it</strong>Spread or tilt your hands. The effect follows the window between them.</p></div><div><span class="step">03</span><p><strong>Switch it</strong>Lower a hand, pause, then bring it back for a different effect.</p></div></section>
+    <footer><span>Frames are processed by your local Python server. No automatic recording.</span><span><kbd>Space</kbd> next effect <span class="key-gap"><kbd>B</kbd> previous</span></span></footer>
+  </main>
+  <video id="camera" autoplay playsinline muted hidden></video>
+  <noscript>This camera studio needs JavaScript enabled in your browser.</noscript>
+</body>
+</html>
