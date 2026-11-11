@@ -6,7 +6,8 @@ const capture = document.createElement('canvas');
 const captureContext = capture.getContext('2d');
 let effects = [], selected = 6, automatic = false;
 let socket = null, stream = null, running = false, demo = false;
-let generation = 0, nextTimer = null, watchdog = null, pending = false;
+let generation = 0, nextTimer = null, watchdog = null, reconnectTimer = null, pending = false;
+let reconnectDelay = 1000;
 let lastFrame = 0, measuredFps = 0, latestImage = null;
 let revision = 0;
 const title = (name) => name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).replace('Rgb', 'RGB').replace('Vhs', 'VHS');
@@ -46,6 +47,8 @@ function cleanup() {
   pending = false;
   clearTimeout(nextTimer);
   clearTimeout(watchdog);
+  clearTimeout(reconnectTimer);
+  reconnectDelay = 1000;
   if (socket) { socket.onclose = null; socket.onerror = null; socket.close(); socket = null; }
   if (stream) { for (const track of stream.getTracks()) track.stop(); stream = null; }
   video.srcObject = null;
@@ -71,7 +74,7 @@ function fail(text) {
 }
 function setWatchdog() {
   clearTimeout(watchdog);
-  watchdog = setTimeout(() => fail('The Python server is not responding. Check its terminal, then try again.'), 20000);
+  watchdog = setTimeout(() => fail('The processing server is not responding. Please start again.'), 60000);
 }
 function queueFrame(token) {
   if (!running || token !== generation) return;
@@ -79,11 +82,12 @@ function queueFrame(token) {
   nextTimer = setTimeout(() => sendFrame(token), 40);
 }
 async function sendFrame(token) {
-  if (!running || token !== generation || pending || socket?.readyState !== WebSocket.OPEN) return;
+  const activeSocket = socket;
+  if (!running || token !== generation || pending || activeSocket?.readyState !== WebSocket.OPEN) return;
   pending = true;
   setWatchdog();
   if (demo) {
-    socket.send(JSON.stringify({type: 'tick'}));
+    activeSocket.send(JSON.stringify({type: 'tick'}));
     return;
   }
   if (!video.videoWidth || video.readyState < 2) {
@@ -101,7 +105,7 @@ async function sendFrame(token) {
   const blob = await new Promise((resolve) => capture.toBlob(resolve, 'image/jpeg', 0.8));
   if (!running || token !== generation) return;
   if (!blob) { fail('Could not capture a camera frame. Please restart the camera.'); return; }
-  if (socket?.readyState === WebSocket.OPEN) socket.send(blob);
+  if (activeSocket.readyState === WebSocket.OPEN) activeSocket.send(blob);
 }
 function statusFromFrame(data) {
   selected = data.effect;
@@ -117,6 +121,87 @@ function statusFromFrame(data) {
   else if (data.changed && !automatic) message(`Next up: ${title(data.name)}. Reopen your hands to reveal it.`);
   else if (data.active) message(automatic ? 'Keep the hand window open to cycle effects every 5 seconds.' : 'Lower a hand or fold your index finger for half a second to switch.');
   else message('Show both hands in L shapes. Keep your thumbs and index fingers visible.');
+}
+function connectSocket(token) {
+  if (!running || token !== generation) return;
+  const activeSocket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  socket = activeSocket;
+  activeSocket.binaryType = 'blob';
+  let incomingStatus = null;
+  setWatchdog();
+  activeSocket.onopen = () => {
+    if (token !== generation || socket !== activeSocket) return;
+    reconnectDelay = 1000;
+    lastFrame = 0;
+    measuredFps = 0;
+    configure();
+    sendFrame(token);
+  };
+  activeSocket.onmessage = async (event) => {
+    if (token !== generation || socket !== activeSocket) return;
+    try {
+      if (typeof event.data === 'string') {
+        const data = JSON.parse(event.data);
+        if (data.type === 'error') { fail(data.message); return; }
+        if (data.type === 'frame') incomingStatus = data;
+        return;
+      }
+      const frameStatus = incomingStatus;
+      incomingStatus = null;
+      // Old frames must not undo a control change made while Python was busy.
+      if (!frameStatus || frameStatus.revision !== revision) {
+        pending = false;
+        clearTimeout(watchdog);
+        queueFrame(token);
+        return;
+      }
+      const bitmap = await createImageBitmap(event.data);
+      if (token !== generation || socket !== activeSocket) { bitmap.close(); return; }
+      if (frameStatus.revision !== revision) {
+        bitmap.close();
+        pending = false;
+        clearTimeout(watchdog);
+        queueFrame(token);
+        return;
+      }
+      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) { canvas.width = bitmap.width; canvas.height = bitmap.height; }
+      context.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      statusFromFrame(frameStatus);
+      latestImage = event.data;
+      canvas.hidden = false;
+      $('empty').hidden = true;
+      $('effect-overlay').hidden = false;
+      $('live-label').hidden = false;
+      $('live-label').textContent = demo ? 'DEMO · CAMERA OFF' : 'LIVE CAMERA';
+      $('source-label').textContent = demo ? 'EFFECT PREVIEW' : 'CAMERA PREVIEW';
+      $('status').classList.add('live');
+      $('snapshot').disabled = false;
+      const now = performance.now();
+      if (lastFrame) measuredFps = measuredFps ? measuredFps * 0.7 + 300 / (now - lastFrame) : 1000 / (now - lastFrame);
+      lastFrame = now;
+      $('fps').textContent = measuredFps ? `${Math.round(measuredFps)} fps` : '—';
+      pending = false;
+      clearTimeout(watchdog);
+      queueFrame(token);
+    } catch { if (token === generation) fail('Could not display the processed image. Please start again.'); }
+  };
+  activeSocket.onerror = () => {
+    if (token === generation && socket === activeSocket) message('Connection interrupted. Reconnecting…');
+  };
+  activeSocket.onclose = () => {
+    if (token !== generation || !running || socket !== activeSocket) return;
+    socket = null;
+    pending = false;
+    clearTimeout(watchdog);
+    clearTimeout(nextTimer);
+    $('status').textContent = 'Reconnecting…';
+    $('status').classList.remove('live');
+    message('Connection paused. Reconnecting to the processing server…');
+    const delay = reconnectDelay;
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    reconnectTimer = setTimeout(() => connectSocket(token), delay);
+  };
 }
 async function start(useDemo) {
   cleanup();
@@ -136,69 +221,8 @@ async function start(useDemo) {
       await video.play();
       if (token !== generation) return;
     }
-    socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-    socket.binaryType = 'blob';
-    let incomingStatus = null;
-    setWatchdog();
-    socket.onopen = () => {
-      if (token !== generation) return;
-      running = true;
-      lastFrame = 0;
-      measuredFps = 0;
-      configure();
-      sendFrame(token);
-    };
-    socket.onmessage = async (event) => {
-      if (token !== generation) return;
-      try {
-        if (typeof event.data === 'string') {
-          const data = JSON.parse(event.data);
-          if (data.type === 'error') { fail(data.message); return; }
-          if (data.type === 'frame') incomingStatus = data;
-          return;
-        }
-        const frameStatus = incomingStatus;
-        incomingStatus = null;
-        // Old frames must not undo a control change made while Python was busy.
-        if (!frameStatus || frameStatus.revision !== revision) {
-          pending = false;
-          clearTimeout(watchdog);
-          queueFrame(token);
-          return;
-        }
-        const bitmap = await createImageBitmap(event.data);
-        if (token !== generation) { bitmap.close(); return; }
-        if (frameStatus.revision !== revision) {
-          bitmap.close();
-          pending = false;
-          clearTimeout(watchdog);
-          queueFrame(token);
-          return;
-        }
-        if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) { canvas.width = bitmap.width; canvas.height = bitmap.height; }
-        context.drawImage(bitmap, 0, 0);
-        bitmap.close();
-        statusFromFrame(frameStatus);
-        latestImage = event.data;
-        canvas.hidden = false;
-        $('empty').hidden = true;
-        $('effect-overlay').hidden = false;
-        $('live-label').hidden = false;
-        $('live-label').textContent = demo ? 'DEMO · CAMERA OFF' : 'LIVE CAMERA';
-        $('source-label').textContent = demo ? 'EFFECT PREVIEW' : 'CAMERA PREVIEW';
-        $('status').classList.add('live');
-        $('snapshot').disabled = false;
-        const now = performance.now();
-        if (lastFrame) measuredFps = measuredFps ? measuredFps * 0.7 + 300 / (now - lastFrame) : 1000 / (now - lastFrame);
-        lastFrame = now;
-        $('fps').textContent = measuredFps ? `${Math.round(measuredFps)} fps` : '—';
-        pending = false;
-        clearTimeout(watchdog);
-        queueFrame(token);
-      } catch { if (token === generation) fail('Could not display the processed image. Please start again.'); }
-    };
-    socket.onerror = () => { if (token === generation) fail('Could not connect to Python. Keep run_web.bat running, then try again.'); };
-    socket.onclose = () => { if (token === generation && running) fail('Connection to Python closed. Start the camera or demo again.'); };
+    running = true;
+    connectSocket(token);
   } catch (error) {
     if (token !== generation) return;
     const friendly = {NotAllowedError: 'Camera permission was denied. Allow camera access for this page, then try again.', NotFoundError: 'No camera was found. Connect a webcam or choose Try demo.', NotReadableError: 'The camera is busy. Close other camera apps, then try again.'};
@@ -249,7 +273,7 @@ try {
   }
   controls(false);
   updateSelection();
-  message(data.model_ready ? 'Ready when you are. Start your camera or explore the demo.' : 'Run setup.bat to download the tracking model. Demo mode is available now.');
+  message(data.model_ready ? 'Ready when you are. Start your camera or explore the demo.' : 'The tracking model is unavailable on the server. Demo mode is available now.');
 } catch {
-  message('The Python server is unavailable. Run run_web.bat and reload this page.', true);
+  message('Could not load studio settings. Refresh the page and try again.', true);
 }

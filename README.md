@@ -39,14 +39,20 @@ browser to avoid a queue of stale video. Frame rate depends on CPU and image siz
 No video frames are stored by the server. Demo mode uses synthetic frames and does
 not test real hand detection.
 
-This starts a **local website**, not a public deployment. GitHub stores the code;
-GitHub Pages alone cannot run this Python backend. Public hosting would require
-a Python-capable server with HTTPS and WebSocket support, plus access controls and
-resource limits appropriate for the intended audience. If hosted remotely, camera
-frames would be sent to that server. The default binds only to `127.0.0.1`.
-Browsers allow camera access on localhost or HTTPS; an HTTP LAN IP may not work.
-See [camera access requirements](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia)
-and [FastAPI WebSockets](https://fastapi.tiangolo.com/advanced/websockets/).
+The app can also be deployed to Vercel as a FastAPI Python Function. Import this
+repository into Vercel and deploy with the project root as the root directory.
+The build command downloads the MediaPipe model, which is intentionally excluded
+from Git. The Vercel deployment serves the frontend and processes camera frames;
+frames leave the browser and are sent to the hosted function. The app does not
+store them. Only deploy it where you are comfortable processing camera data.
+
+Vercel WebSockets are currently in public beta and close when a Function reaches
+its maximum duration (300 seconds on Hobby). The browser reconnects automatically.
+The default local server still binds only to `127.0.0.1`. Browsers allow camera
+access on localhost or HTTPS; an HTTP LAN IP may not work. See [camera access
+requirements](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia),
+[FastAPI WebSockets](https://fastapi.tiangolo.com/advanced/websockets/), and
+[Vercel WebSockets](https://vercel.com/docs/functions/websockets).
 
 ### Desktop OpenCV window
 
