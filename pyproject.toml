@@ -1,2 +1,15 @@
+[project]
+name = "hand-portal"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+	"mediapipe==0.10.32",
+	"opencv-contrib-python>=4.11,<5",
+	"numpy>=2,<3",
+	"fastapi>=0.115,<1",
+	"uvicorn>=0.34,<1",
+	"websockets>=14,<17",
+]
+
 [tool.vercel.scripts]
 build = "python build.py"
